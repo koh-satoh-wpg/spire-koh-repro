@@ -12,7 +12,7 @@ Minikube is installed.
     ```sh
     kubectl -n server2 logs -f spire-server-0 -c spire-server
     ```
-1. (Leave the log termnal and go back to the main terminal,) apply spiffe-id.yaml, a registration entry under server1.com trust domain.
+1. (Leave the log termnal and go back to the main terminal,) apply spiffe-id.yaml, a registration entry under A.com trust domain.
     ```sh
     kubectl apply -f spiffe-id.yaml
     ```

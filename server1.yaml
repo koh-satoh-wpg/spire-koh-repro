@@ -14,7 +14,7 @@ data:
       bind_address = "0.0.0.0"
       bind_port = "8081"
       socket_path = "/tmp/spire-server/private/api.sock"
-      trust_domain = "server1.com"
+      trust_domain = "A.com"
       data_dir = "/run/spire/data"
       log_level = "DEBUG"
       #AWS requires the use of RSA.  EC cryptography is not supported
@@ -23,7 +23,7 @@ data:
       ca_subject = {
         country = ["JP"],
         organization = ["server1"],
-        common_name = "server1.com",
+        common_name = "A.com",
       }
 
       ca_ttl = "720h"
@@ -57,7 +57,7 @@ metadata:
 data:
   k8s-workload-registrar.conf: |
     log_level = "debug"
-    trust_domain = "server1.com"
+    trust_domain = "A.com"
     server_socket_path = "/tmp/spire-server/private/api.sock"
     cluster = "demo-cluster"
     pod_controller = false
