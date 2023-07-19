@@ -52,19 +52,26 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: k8s-workload-registrar
+  name: spire-controller-manager
   namespace: server2
 data:
-  k8s-workload-registrar.conf: |
-    log_level = "debug"
-    trust_domain = "B.com"
-    server_socket_path = "/tmp/spire-server/private/api.sock"
-    cluster = "demo-cluster"
-    pod_controller = false
-    add_svc_dns_names = false
-    mode = "crd"
-    leader_election = false
-    webhook_enabled = false
+  spire-controller-manager-config.yaml: |
+    apiVersion: spire.spiffe.io/v1alpha1
+    kind: ControllerManagerConfig
+    metrics:
+      bindAddress: 127.0.0.1:8082
+    health:
+      healthProbeBindAddress: 127.0.0.1:8083
+    leaderElection:
+      leaderElect: false
+    clusterName: cluster1
+    trustDomain: B.com
+    spireServerSocketPath: /tmp/spire-server/private/api.sock
+    validatingWebhookConfigurationName: server2--spire-controller-manager-webhook
+    ignoreNamespaces:
+      - kube-system
+      - kube-public
+      - local-path-storage
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -88,7 +95,7 @@ spec:
       serviceAccountName: spire-server
       containers:
         - name: spire-server
-          image: ghcr.io/spiffe/spire-server:1.5.4
+          image: ghcr.io/spiffe/spire-server:1.7.0
           args:
             - -config
             - /run/spire/config/server.conf
@@ -116,23 +123,17 @@ spec:
               command: ["/opt/spire/bin/spire-server", "healthcheck", "--shallow"]
             initialDelaySeconds: 5
             periodSeconds: 5
-        - name: k8s-workload-registrar
-          image: gcr.io/spiffe-io/k8s-workload-registrar:1.5.4
+        - name: spire-controller-manager
+          image: ghcr.io/spiffe/spire-controller-manager:nightly
           args:
-            - -config
-            - /run/spire/config/k8s-workload-registrar.conf
-          env:
-            - name: MY_POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+            - "--config=/run/spire/config/spire-controller-manager-config.yaml"
           ports:
             - containerPort: 9443
               name: webhook
               protocol: TCP
           volumeMounts:
             - mountPath: /run/spire/config
-              name: k8s-workload-registrar-config
+              name: spire-controller-manager-config
               readOnly: true
             - name: spire-registration-socket
               mountPath: /tmp
@@ -141,9 +142,9 @@ spec:
         - name: spire-config
           configMap:
             name: spire-server
-        - name: k8s-workload-registrar-config
+        - name: spire-controller-manager-config
           configMap:
-            name: k8s-workload-registrar
+            name: spire-controller-manager
         - name: spire-registration-socket
           emptyDir: {}
   volumeClaimTemplates:
@@ -217,12 +218,59 @@ roleRef:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: server2--k8s-workload-registrar-role-binding
+  name: server2--manager-role-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: k8s-workload-registrar-role
+  name: manager-role
 subjects:
 - kind: ServiceAccount
   name: spire-server
   namespace: server2
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: server2--spire-controller-manager-webhook
+webhooks:
+  - admissionReviewVersions: ["v1"]
+    clientConfig:
+      service:
+        name: spire-controller-manager-webhook-service
+        namespace: server2
+        path: /validate-spire-spiffe-io-v1alpha1-clusterfederatedtrustdomain
+    failurePolicy: Fail
+    name: vclusterfederatedtrustdomain.kb.io
+    rules:
+      - apiGroups: ["spire.spiffe.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["clusterfederatedtrustdomains"]
+    sideEffects: None
+  - admissionReviewVersions: ["v1"]
+    clientConfig:
+      service:
+        name: spire-controller-manager-webhook-service
+        namespace: server2
+        path: /validate-spire-spiffe-io-v1alpha1-clusterspiffeid
+    failurePolicy: Fail
+    name: vclusterspiffeid.kb.io
+    rules:
+      - apiGroups: ["spire.spiffe.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["clusterspiffeids"]
+    sideEffects: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spire-controller-manager-webhook-service
+  namespace: server2
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    app: spire-server

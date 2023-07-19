@@ -17,5 +17,5 @@ kubectl wait -n server1 pod -l app=spire-server --for=condition=Ready --timeout=
 sleep 5
 
 JOIN_TOKEN=$(kubectl -n server1 exec spire-server-0 -c spire-server -- /opt/spire/bin/spire-server token generate | head -n 1 | cut -d' ' -f2)
-cat $SCRIPT_DIR/spiffe-id.yaml.tpl |\
-  sed s/\${JOIN_TOKEN}/$JOIN_TOKEN/ > $SCRIPT_DIR/spiffe-id.yaml
+cat $SCRIPT_DIR/cluster-static-entry.yaml.tpl |\
+  sed s/\${JOIN_TOKEN}/$JOIN_TOKEN/ > $SCRIPT_DIR/cluster-static-entry.yaml
